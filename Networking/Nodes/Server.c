@@ -1,13 +1,13 @@
 #include "Server.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-struct Server server_constructor(int domain, int service, int protocol, 
-		u_long interface, int port, int backlog, void (*launch)(struct Server *server))
+void register_routes_server(struct Server *server, char *(*route_function)(void *arg), char *path);
+
+// CONSTRUCTORS
+struct Server server_constructor(int domain, int service, int protocol, u_long interface, int port, int backlog) 
 {
-	// 1. Creates server object then returns to whoever called it
-	// 2. Uses header parameters to determine them for given address
-	// 3. Creates a socket for the server, bind socket, and starts listening
 	struct Server server;
 	
 	server.domain = domain;
@@ -17,32 +17,42 @@ struct Server server_constructor(int domain, int service, int protocol,
 	server.port = port;
 	server.backlog = backlog;
 
-	server.address.sin_family = domain; // 
+	// socket address structure
+	server.address.sin_family = domain; 
 	server.address.sin_port = htons(port); // convert int port to bytes that will refer to a network port
-	server.address.sin_addr.s_addr = htonl(interface); // 
+	server.address.sin_addr.s_addr = htonl(interface); 
 	
-	// Create socket for server
+	// create socket for server
 	server.socket = socket(domain, service, protocol); // create socket connection to network
+	
+	server.routes = dictionary_constructor(compare_string_keys);
+	server.register_routes = register_routes_server;
+
 	if (server.socket == 0)
 	{
 			perror("Failed to connect socket...\n");
 			exit(1);
 	}
 
-	// Bind socket to network
+	// bind socket to network
 	if (bind(server.socket, (struct sockaddr *)&server.address, sizeof(server.address)) < 0)
 	{
 			perror("Failed to bind socket...\n");
 			exit(1);
 	}
-	
+	// listen on network	
 	if (listen(server.socket, server.backlog) < 0)
 	{
 			perror("Failed to start listening...\n");
 			exit(1);
 	}
 
-	server.launch = launch;
-
 	return server;
+}
+
+void register_routes_server(struct Server *server, char *(route_function)(void *arg), char *path)
+{
+	struct ServerRoute route;
+	route.route_function = route_function;
+	server->routes.insert(&server->routes, path, sizeof(char[strlen(path)]), &route, sizeof(route));
 }
